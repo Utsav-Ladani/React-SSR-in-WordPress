@@ -1,0 +1,16 @@
+{
+  "name": "react-in-php",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "node scripts/build.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@babel/cli": "^7.28.3",
+    "@babel/core": "^7.28.5"
+  }
+}
