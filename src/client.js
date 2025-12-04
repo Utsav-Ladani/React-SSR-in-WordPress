@@ -6,4 +6,6 @@ import './style.scss';
 
 const root = document.getElementById("wxr-root");
 
-hydrateRoot(root, <App />);
+const props = root.dataset.props ? JSON.parse(root.dataset.props) : {};
+
+hydrateRoot(root, <App {...props} />);

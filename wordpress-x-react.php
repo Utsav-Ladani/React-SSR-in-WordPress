@@ -19,8 +19,8 @@ define('CLIENT_BUILD_URL', plugin_dir_url(__FILE__) . 'build');
 function wxr_register_menu()
 {
     add_menu_page(
-        'React in PHP',
-        'React in PHP',
+        'Todo App',
+        'Todo App',
         'manage_options',
         'wordpress-x-react',
         'wxr_render_page',
@@ -53,9 +53,25 @@ add_action('admin_enqueue_scripts', 'wxr_enqueue_scripts');
 
 function wxr_render_page()
 {
+    global $props;
+
+    $todos = get_posts([
+        'post_type' => 'wxr_todo',
+        'numberposts' => -1,
+    ]);
+
+    $props = [
+        'todos' => array_map(function ($post) {
+            return [
+                'id' => $post->ID,
+                'title' => $post->post_title,
+            ];
+        }, $todos),
+    ];
+
     $snippet_file = SERVER_BUILD_DIR . '/server.php';
 
-    echo '<div id="wxr-root" class="tailwindcss">';
+    echo '<div id="wxr-root" class="tailwindcss" data-props="' . esc_attr(json_encode($props)) . '">';
 
     if (file_exists($snippet_file)) {
         require $snippet_file;
@@ -65,3 +81,15 @@ function wxr_render_page()
 
     echo '</div>';
 }
+
+// register a todo post type for testing
+function wxr_register_todo_post_type() {
+    register_post_type('wxr_todo', [
+        'label' => 'Todos',
+        'public' => true,
+        'show_in_menu' => true,
+        'supports' => ['title'],
+        'menu_icon' => 'dashicons-list-view',
+    ]);
+}
+add_action('init', 'wxr_register_todo_post_type');

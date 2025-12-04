@@ -1,5 +1,5 @@
-import render from "@rip/render";
+import render from "@wxr/render";
 
 import App from "./app.js";
 
-render(App());
+render('App');

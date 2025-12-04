@@ -116,6 +116,41 @@ module.exports = function ({ types: t }) {
                 const expr = generateExpression(path.node.expression, program.state);
                 appendPhp(path, `  ${expr};\n`);
             },
+            IfStatement: {
+                enter(path) {
+                    const program = path.findParent(p => p.isProgram());
+                    const test = generateExpression(path.node.test, program.state);
+                    
+                    // Check if this is part of an else-if chain
+                    const parent = path.parent;
+                    if (parent.type === 'IfStatement' && parent.alternate === path.node) {
+                        // This is an else-if, don't add 'if' yet, it will be added in the parent's exit
+                        return;
+                    }
+                    
+                    appendPhp(path, `  if (${test}) {\n`);
+                },
+                exit(path) {
+                    const parent = path.parent;
+                    if (parent.type === 'IfStatement' && parent.alternate === path.node) {
+                        // This is an else-if, handled by parent
+                        return;
+                    }
+                    
+                    if (path.node.alternate) {
+                        if (path.node.alternate.type === 'IfStatement') {
+                            // else if
+                            const test = generateExpression(path.node.alternate.test, path.findParent(p => p.isProgram()).state);
+                            appendPhp(path, `  } else if (${test}) {\n`);
+                        } else {
+                            // else block
+                            appendPhp(path, `  } else {\n`);
+                        }
+                    } else {
+                        appendPhp(path, `  }\n`);
+                    }
+                }
+            },
             // We need to handle specific nodes to transform them to PHP strings.
         }
     };
@@ -129,16 +164,20 @@ function generateExpression(node, state) {
     if (node.type === 'BooleanLiteral') return node.value ? 'true' : 'false';
     if (node.type === 'NullLiteral') return 'null';
     if (node.type === 'ArrayExpression') {
-        const elements = node.elements.map(el => generateExpression(el, state)).join(', ');
+        const elements = node.elements.map(el => {
+            if (el.type === 'SpreadElement') {
+                // Handle spread syntax: ...array
+                return '...' + generateExpression(el.argument, state);
+            }
+            return generateExpression(el, state);
+        }).join(', ');
         return `[${elements}]`;
     }
     if (node.type === 'ObjectExpression') {
         const properties = node.properties.map(prop => {
             const key = prop.key.name || prop.key.value;
-            // Check if the value is a function reference (Identifier)
-            const value = prop.value.type === 'Identifier' 
-                ? `'${prop.value.name}'`  // Function reference as string
-                : generateExpression(prop.value, state);
+            // Generate value expression (identifiers become variables with $)
+            const value = generateExpression(prop.value, state);
             return `'${key}' => ${value}`;
         }).join(', ');
         return `[${properties}]`;
@@ -168,11 +207,42 @@ function generateExpression(node, state) {
             } else {
                 callee = `$${name}`;
             }
+        } else if (node.callee.type === 'MemberExpression') {
+            // Handle method calls like array.map(), string.trim()
+            const object = generateExpression(node.callee.object, state);
+            const method = node.callee.property.name;
+            
+            if (method === 'map') {
+                // Convert .map() to array_map()
+                const callback = node.arguments[0];
+                const callbackStr = generateExpression(callback, state);
+                return `array_map(${callbackStr}, ${object})`;
+            }
+            
+            if (method === 'trim') {
+                // Convert .trim() to trim()
+                return `trim(${object})`;
+            }
+            
+            if (method === 'preventDefault') {
+                // Convert e.preventDefault() to a comment (not applicable in PHP)
+                return '/* preventDefault() */';
+            }
+            
+            callee = generateExpression(node.callee, state);
         } else {
             callee = generateExpression(node.callee, state);
         }
-        const args = node.arguments.map(arg => generateExpression(arg, state)).join(', ');
-        return `${callee}(${args})`;
+        
+        if (node.callee.type !== 'MemberExpression' || node.callee.property.name !== 'map') {
+            const args = node.arguments.map(arg => {
+                if (arg.type === 'SpreadElement') {
+                    return '...' + generateExpression(arg.argument, state);
+                }
+                return generateExpression(arg, state);
+            }).join(', ');
+            return `${callee}(${args})`;
+        }
     }
     if (node.type === 'Identifier') {
         // Always add $ prefix for identifiers (variables)
@@ -180,10 +250,16 @@ function generateExpression(node, state) {
     }
     if (node.type === 'MemberExpression') {
         const object = generateExpression(node.object, state);
-        const property = node.computed 
+        // Always use [property] access for PHP arrays/objects
+        const property = node.computed
             ? `[${generateExpression(node.property, state)}]`
-            : `->${node.property.name}`;
+            : `[${JSON.stringify(node.property.name)}]`;
         return `${object}${property}`;
+    }
+    if (node.type === 'ArrowFunctionExpression') {
+        const params = node.params.map(p => `$${p.name}`).join(', ');
+        const body = generateExpression(node.body, state);
+        return `function(${params}) { return ${body}; }`;
     }
     // Add more as needed
     return '/* unsupported */';

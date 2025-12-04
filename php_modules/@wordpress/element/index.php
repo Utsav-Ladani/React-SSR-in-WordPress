@@ -1,6 +1,6 @@
 <?php
 
-const DISALLOWED_PROPS = ['onClick', 'onChange'];
+const DISALLOWED_PROPS = ['onClick', 'onChange', 'onSubmit', 'key'];
 
 function createElement($tag, $props, ...$children)
 {
