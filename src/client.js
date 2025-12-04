@@ -2,6 +2,8 @@ import { hydrateRoot } from "@wordpress/element";
 
 import App from "./app";
 
-const root = document.getElementById("rip-root");
+import './style.scss';
+
+const root = document.getElementById("wxr-root");
 
 hydrateRoot(root, <App />);

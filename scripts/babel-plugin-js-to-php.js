@@ -2,6 +2,23 @@ module.exports = function ({ types: t }) {
     return {
         visitor: {
             Program: {
+                enter(path) {
+                    if (!path.state) path.state = {};
+                    path.state.functionNames = new Set();
+                    path.state.importedNames = new Set();
+                    // Collect all function names and imported names in the program
+                    path.traverse({
+                        FunctionDeclaration(funcPath) {
+                            path.state.functionNames.add(funcPath.node.id.name);
+                        },
+                        ImportDeclaration(importPath) {
+                            // Collect imported specifiers
+                            importPath.node.specifiers.forEach(spec => {
+                                path.state.importedNames.add(spec.local.name);
+                            });
+                        }
+                    });
+                },
                 exit(path) {
                     const phpCode = path.state.phpOutput || "";
                     // Store the PHP code in metadata so the build script can retrieve it
@@ -29,30 +46,74 @@ module.exports = function ({ types: t }) {
             },
             FunctionDeclaration: {
                 enter(path) {
+                    const program = path.findParent(p => p.isProgram());
                     const name = path.node.id.name;
                     const params = path.node.params.map(generateExpression).join(', ');
-                    appendPhp(path, `function ${name}(${params}) {\n`);
+                    
+                    // Check if this is a nested function (inside another function)
+                    const parentFunc = path.getFunctionParent();
+                    if (parentFunc) {
+                        // Nested function - convert to closure
+                        // Collect variables used in the function body that are from parent scope
+                        const usedVars = new Set();
+                        path.traverse({
+                            Identifier(idPath) {
+                                const varName = idPath.node.name;
+                                // Don't include the function name itself
+                                // Don't include identifiers that are part of member expressions (like target in e.target)
+                                if (varName !== name && !path.scope.hasOwnBinding(varName)) {
+                                    const parent = idPath.parent;
+                                    if (parent.type !== 'MemberExpression' || parent.object === idPath.node) {
+                                        usedVars.add(`$${varName}`);
+                                    }
+                                }
+                            }
+                        });
+                        
+                        const useClause = usedVars.size > 0 ? ` use (${Array.from(usedVars).join(', ')})` : '';
+                        appendPhp(path, `  $${name} = function(${params})${useClause} {\n`);
+                    } else {
+                        // Top-level function
+                        appendPhp(path, `function ${name}(${params}) {\n`);
+                    }
                 },
                 exit(path) {
-                    appendPhp(path, "}\n");
+                    const parentFunc = path.getFunctionParent();
+                    if (parentFunc) {
+                        // Nested function - close the closure assignment
+                        appendPhp(path, "  };\n");
+                    } else {
+                        // Top-level function
+                        appendPhp(path, "}\n");
+                    }
                 }
             },
             VariableDeclaration(path) {
+                const program = path.findParent(p => p.isProgram());
                 const declarations = path.node.declarations;
                 let code = "";
                 declarations.forEach(decl => {
-                    const name = decl.id.name;
-                    const init = generateExpression(decl.init);
-                    code += `  $${name} = ${init};\n`;
+                    // Handle array destructuring
+                    if (decl.id.type === 'ArrayPattern') {
+                        const init = generateExpression(decl.init, program.state);
+                        const vars = decl.id.elements.map(el => el ? `$${el.name}` : null).filter(Boolean);
+                        code += `  list(${vars.join(', ')}) = ${init};\n`;
+                    } else {
+                        const name = decl.id.name;
+                        const init = generateExpression(decl.init, program.state);
+                        code += `  $${name} = ${init};\n`;
+                    }
                 });
                 appendPhp(path, code);
             },
             ReturnStatement(path) {
-                const arg = generateExpression(path.node.argument);
+                const program = path.findParent(p => p.isProgram());
+                const arg = generateExpression(path.node.argument, program.state);
                 appendPhp(path, `  return ${arg};\n`);
             },
             ExpressionStatement(path) {
-                const expr = generateExpression(path.node.expression);
+                const program = path.findParent(p => p.isProgram());
+                const expr = generateExpression(path.node.expression, program.state);
                 appendPhp(path, `  ${expr};\n`);
             },
             // We need to handle specific nodes to transform them to PHP strings.
@@ -61,27 +122,69 @@ module.exports = function ({ types: t }) {
 };
 
 // Helper to generate expression string
-function generateExpression(node) {
+function generateExpression(node, state) {
     if (!node) return 'null';
     if (node.type === 'NumericLiteral') return node.value;
     if (node.type === 'StringLiteral') return `'${node.value}'`;
     if (node.type === 'BooleanLiteral') return node.value ? 'true' : 'false';
     if (node.type === 'NullLiteral') return 'null';
     if (node.type === 'ArrayExpression') {
-        const elements = node.elements.map(generateExpression).join(', ');
+        const elements = node.elements.map(el => generateExpression(el, state)).join(', ');
         return `[${elements}]`;
+    }
+    if (node.type === 'ObjectExpression') {
+        const properties = node.properties.map(prop => {
+            const key = prop.key.name || prop.key.value;
+            // Check if the value is a function reference (Identifier)
+            const value = prop.value.type === 'Identifier' 
+                ? `'${prop.value.name}'`  // Function reference as string
+                : generateExpression(prop.value, state);
+            return `'${key}' => ${value}`;
+        }).join(', ');
+        return `[${properties}]`;
+    }
+    if (node.type === 'BinaryExpression') {
+        const left = generateExpression(node.left, state);
+        const right = generateExpression(node.right, state);
+        let operator = node.operator;
+        // In PHP, use . for string concatenation instead of + when either operand is a string
+        if (operator === '+') {
+            const isLeftString = node.left.type === 'StringLiteral';
+            const isRightString = node.right.type === 'StringLiteral';
+            if (isLeftString || isRightString) {
+                operator = '.';
+            }
+        }
+        return `${left} ${operator} ${right}`;
     }
     if (node.type === 'CallExpression') {
         let callee;
         if (node.callee.type === 'Identifier') {
-            callee = node.callee.name;
+            const name = node.callee.name;
+            // Check if it's a known function name (declared or imported)
+            const isFunctionName = state && ((state.functionNames && state.functionNames.has(name)) || (state.importedNames && state.importedNames.has(name)));
+            if (isFunctionName) {
+                callee = name;
+            } else {
+                callee = `$${name}`;
+            }
         } else {
-            callee = generateExpression(node.callee);
+            callee = generateExpression(node.callee, state);
         }
-        const args = node.arguments.map(generateExpression).join(', ');
+        const args = node.arguments.map(arg => generateExpression(arg, state)).join(', ');
         return `${callee}(${args})`;
     }
-    if (node.type === 'Identifier') return `$${node.name}`;
+    if (node.type === 'Identifier') {
+        // Always add $ prefix for identifiers (variables)
+        return `$${node.name}`;
+    }
+    if (node.type === 'MemberExpression') {
+        const object = generateExpression(node.object, state);
+        const property = node.computed 
+            ? `[${generateExpression(node.property, state)}]`
+            : `->${node.property.name}`;
+        return `${object}${property}`;
+    }
     // Add more as needed
     return '/* unsupported */';
 }

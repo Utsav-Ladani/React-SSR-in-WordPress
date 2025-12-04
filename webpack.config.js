@@ -1,3 +1,4 @@
+import path from 'path';
 import defaultConfig from '@wordpress/scripts/config/webpack.config.js';
 import { CleanWebpackPlugin } from 'clean-webpack-plugin';
 
@@ -25,6 +26,21 @@ export default {
 	// Ignore build directory to avoid infinite webpack compilation loop.
 	watchOptions: {
 		ignored: [ '**/build' ]
+	},
+	module: {
+		...defaultConfig.module,
+		rules: [
+			...defaultConfig.module.rules,
+			/**
+			 * postcss-loader is already added in the defaultConfig
+			 * but we need it here for tailwindcss.
+			 */
+			{
+				test: /\.scss$/i,
+				include: path.resolve( import.meta.dirname, 'src' ),
+				use: [ 'postcss-loader' ]
+			}
+		]
 	},
 	plugins: [
 		...plugins,

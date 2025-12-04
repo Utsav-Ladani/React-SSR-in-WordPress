@@ -1,5 +1,5 @@
 {
-  "name": "react-in-php",
+  "name": "wordpress-x-react",
   "version": "1.0.0",
   "scripts": {
     "build:server": "node scripts/build.js",
@@ -14,7 +14,13 @@
   "devDependencies": {
     "@babel/cli": "^7.28.3",
     "@babel/core": "^7.28.5",
+    "@tailwindcss/postcss": "^4.1.17",
     "@wordpress/scripts": "^31.1.0",
-    "clean-webpack-plugin": "^4.0.0"
+    "clean-webpack-plugin": "^4.0.0",
+    "postcss": "^8.5.6",
+    "postcss-loader": "^8.2.0"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.1.17"
   }
 }
