@@ -19,12 +19,22 @@ function ToDo(initialTodos) {
             return;
         }
 
-        setTodos([...todos, { 'id': todos.length + 1, 'title': newTodo }]);
+        setTodos([{ 'id': todos.length + 1, 'title': newTodo, 'isDone': false }, ...todos]);
         setNewTodo("");
     }
 
     function handleChange(e) {
         setNewTodo(e.target.value);
+    }
+
+    function handleToggle(id) {
+        const updatedTodos = todos.map((t) => {
+            if (t.id === id) {
+                return { ...t, "isDone": t.isDone === true ? false : true };
+            }
+            return t;
+        });
+        setTodos(updatedTodos);
     }
 
     return createElement(
@@ -40,8 +50,8 @@ function ToDo(initialTodos) {
             {
                 value: newTodo,
                 onChange: handleChange,
-                placeholder: "New todo",
-                className: "border p-2 rounded mr-2"
+                placeholder: "Enter new todo",
+                className: "border p-2 rounded mr-2 w-[300px]"
             }
         ),
         createElement(
@@ -53,11 +63,28 @@ function ToDo(initialTodos) {
         ),
         createElement(
             "ul",
-            { className: "mt-4 w-[200px]" },
-            ...todos.map((todo) =>
-                createElement("li", { key: todo.id, className: "bg-white py-1.5 px-2 rounded border border-gray-300 hover:scale-105 hover:cursor-pointer hover:border-blue-500" }, todo.title)
+            { className: "mt-4 w-[400px] !space-y-2" },
+            ...todos.map((todo) => ToDoItem(todo, handleToggle)
             )
         )
+    );
+}
+
+function ToDoItem(todo, handleToggle) {
+    function handleChange() {
+        handleToggle(todo.id);
+    }
+
+    return createElement(
+        "li",
+        { key: todo.id },
+        createElement(
+            "label",
+            {className: "flex gap-2 bg-white py-2 px-2 rounded border border-gray-300 transition-transform duration-200 ease-in-out hover:scale-105 hover:border-blue-500 hover:cursor-pointer"},
+            createElement("span", { className: todo.isDone ? "size-4 block box-border rounded-full shrink-0 bg-blue-400" : "size-4 block box-border rounded-full shrink-0 border border-gray-300" }, ''),
+            createElement("input", { type: "checkbox", className: "mr-2 hidden", value: todo.isDone, onChange: handleChange }),
+            createElement("span", { className: todo.isDone ? "line-through" : "" }, todo.title)
+        ),
     );
 }
 

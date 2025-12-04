@@ -54,17 +54,35 @@ module.exports = function ({ types: t }) {
                     const parentFunc = path.getFunctionParent();
                     if (parentFunc) {
                         // Nested function - convert to closure
+                        // Collect all parameters from nested functions to exclude them
+                        const nestedParams = new Set();
+                        path.traverse({
+                            'FunctionExpression|ArrowFunctionExpression|FunctionDeclaration'(nestedPath) {
+                                if (nestedPath !== path) {
+                                    nestedPath.node.params.forEach(p => {
+                                        nestedParams.add(p.name);
+                                    });
+                                }
+                            }
+                        });
+                        
                         // Collect variables used in the function body that are from parent scope
                         const usedVars = new Set();
+                        const functionParams = new Set(path.node.params.map(p => p.name));
+                        
                         path.traverse({
                             Identifier(idPath) {
                                 const varName = idPath.node.name;
-                                // Don't include the function name itself
-                                // Don't include identifiers that are part of member expressions (like target in e.target)
-                                if (varName !== name && !path.scope.hasOwnBinding(varName)) {
-                                    const parent = idPath.parent;
-                                    if (parent.type !== 'MemberExpression' || parent.object === idPath.node) {
-                                        usedVars.add(`$${varName}`);
+                                // Skip: function name, function parameters, nested function parameters
+                                if (varName !== name && !functionParams.has(varName) && !nestedParams.has(varName)) {
+                                    // Check if variable is from outer (parent) scope, not current scope
+                                    const binding = path.scope.getBinding(varName);
+                                    if (binding && binding.scope !== path.scope) {
+                                        // Variable is from parent scope
+                                        const parent = idPath.parent;
+                                        if (parent.type !== 'MemberExpression' || parent.object === idPath.node) {
+                                            usedVars.add(`$${varName}`);
+                                        }
                                     }
                                 }
                             }
@@ -175,7 +193,11 @@ function generateExpression(node, state) {
     }
     if (node.type === 'ObjectExpression') {
         const properties = node.properties.map(prop => {
-            const key = prop.key.name || prop.key.value;
+            // Handle spread elements in objects
+            if (prop.type === 'SpreadElement') {
+                return '...' + generateExpression(prop.argument, state);
+            }
+            const key = prop.key ? (prop.key.name || prop.key.value) : 'unknown';
             // Generate value expression (identifiers become variables with $)
             const value = generateExpression(prop.value, state);
             return `'${key}' => ${value}`;
@@ -259,7 +281,71 @@ function generateExpression(node, state) {
     if (node.type === 'ArrowFunctionExpression') {
         const params = node.params.map(p => `$${p.name}`).join(', ');
         const body = generateExpression(node.body, state);
-        return `function(${params}) { return ${body}; }`;
+        
+        // Collect variables used in the arrow function body from outer scope
+        const usedVars = new Set();
+        const functionParams = new Set(node.params.map(p => p.name));
+        const callees = new Set(); // Track function names that are called
+        
+        // For arrow functions with expression bodies, collect identifiers
+        if (node.body.type !== 'BlockStatement') {
+            // First pass: collect all function callees
+            const collectCallees = (n, visited = new WeakSet()) => {
+                if (!n || visited.has(n)) return;
+                if (typeof n === 'object') visited.add(n);
+                
+                if (n.type === 'CallExpression' && n.callee && n.callee.type === 'Identifier') {
+                    callees.add(n.callee.name);
+                } else if (typeof n === 'object' && n !== null) {
+                    for (const key in n) {
+                        if (key !== 'parent' && key !== 'loc' && key !== 'start' && key !== 'end') {
+                            const val = n[key];
+                            if (Array.isArray(val)) {
+                                val.forEach(item => collectCallees(item, visited));
+                            } else if (typeof val === 'object' && val !== null) {
+                                collectCallees(val, visited);
+                            }
+                        }
+                    }
+                }
+            };
+            collectCallees(node.body);
+            
+            // Second pass: collect identifiers that are not function callees
+            const collectIdentifiers = (n, visited = new WeakSet()) => {
+                if (!n || visited.has(n)) return;
+                if (typeof n === 'object') visited.add(n);
+                
+                if (n.type === 'Identifier') {
+                    const varName = n.name;
+                    // Skip: function params, identifiers that are function callees
+                    if (!functionParams.has(varName) && !callees.has(varName)) {
+                        usedVars.add(`$${varName}`);
+                    }
+                } else if (typeof n === 'object' && n !== null) {
+                    for (const key in n) {
+                        if (key !== 'parent' && key !== 'loc' && key !== 'start' && key !== 'end') {
+                            const val = n[key];
+                            if (Array.isArray(val)) {
+                                val.forEach(item => collectIdentifiers(item, visited));
+                            } else if (typeof val === 'object' && val !== null) {
+                                collectIdentifiers(val, visited);
+                            }
+                        }
+                    }
+                }
+            };
+            collectIdentifiers(node.body);
+        }
+        
+        const useClause = usedVars.size > 0 ? ` use (${Array.from(usedVars).join(', ')})` : '';
+        return `function(${params})${useClause} { return ${body}; }`;
+    }
+    if (node.type === 'ConditionalExpression') {
+        const test = generateExpression(node.test, state);
+        const consequent = generateExpression(node.consequent, state);
+        const alternate = generateExpression(node.alternate, state);
+        return `(${test} ? ${consequent} : ${alternate})`;
     }
     // Add more as needed
     return '/* unsupported */';

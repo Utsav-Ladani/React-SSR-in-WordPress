@@ -58,6 +58,7 @@ function wxr_render_page()
     $todos = get_posts([
         'post_type' => 'wxr_todo',
         'numberposts' => -1,
+        'post_status' => ['publish', 'draft'],
     ]);
 
     $props = [
@@ -65,6 +66,7 @@ function wxr_render_page()
             return [
                 'id' => $post->ID,
                 'title' => $post->post_title,
+                'isDone' => $post->post_status === 'publish',
             ];
         }, $todos),
     ];
