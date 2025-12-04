@@ -1,9 +1,11 @@
 {
   "name": "react-in-php",
   "version": "1.0.0",
-  "main": "index.js",
   "scripts": {
-    "build": "node scripts/build.js"
+    "build:server": "node scripts/build.js",
+    "build:client": "wp-scripts build src/client.js",
+    "build": "npm run build:server && npm run build:client",
+    "start": "wp-scripts start --hot"
   },
   "keywords": [],
   "author": "",
@@ -11,6 +13,8 @@
   "description": "",
   "devDependencies": {
     "@babel/cli": "^7.28.3",
-    "@babel/core": "^7.28.5"
+    "@babel/core": "^7.28.5",
+    "@wordpress/scripts": "^31.1.0",
+    "clean-webpack-plugin": "^4.0.0"
   }
 }

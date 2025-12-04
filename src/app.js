@@ -13,9 +13,11 @@ function Button() {
 }
 
 export default function App() {
-    return createElement("div", null, [
+    return createElement(
+        "div",
+        null,
         Heading(),
         Description(),
         Button(),
-    ]);
+    );
 }

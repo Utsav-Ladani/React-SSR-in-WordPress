@@ -1,7 +1,7 @@
-import { createRoot } from "@wordpress/element";
+import { hydrateRoot } from "@wordpress/element";
 
 import App from "./app";
 
-const root = document.getElementById("root");
+const root = document.getElementById("rip-root");
 
-createRoot(root).render(App);
+hydrateRoot(root, <App />);

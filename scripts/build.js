@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const srcDir = path.join(__dirname, '../src');
-const buildDir = path.join(__dirname, '../build');
+const buildDir = path.join(__dirname, '../build-server');
 
 if (!fs.existsSync(buildDir)) {
     fs.mkdirSync(buildDir);
@@ -42,7 +42,7 @@ while (queue.length > 0) {
 
     try {
         const result = babel.transform(code, {
-            plugins: [path.join(__dirname, '../babel-plugin-js-to-php.js')]
+            plugins: [path.join(__dirname, './babel-plugin-js-to-php.js')]
         });
 
         const phpOutput = result.metadata.phpOutput;
