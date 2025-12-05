@@ -10,6 +10,10 @@ This plugin showcases how to integrate React components into WordPress with:
 - A sample To-Do List application
 - Tailwind CSS styling
 
+## Demo
+
+https://github.com/user-attachments/assets/dd3940a4-5bba-41a1-af78-e3ef63f0df34
+
 ## Build Instructions
 
 1. Install dependencies:
@@ -26,6 +30,3 @@ This plugin showcases how to integrate React components into WordPress with:
    - Server-side PHP files in `build-server/`
    - Client-side JavaScript in `build/`
 
-## Screenshots
-
-<img width="1276" height="711" alt="Screenshot 2025-12-05 at 3 37 06 PM" src="https://github.com/user-attachments/assets/d5117fed-8abb-4778-a66a-31c701203eae" />
