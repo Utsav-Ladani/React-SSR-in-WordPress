@@ -28,4 +28,4 @@ This plugin showcases how to integrate React components into WordPress with:
 
 ## Screenshots
 
-[Screenshots section - to be added]
+<img width="1276" height="711" alt="Screenshot 2025-12-05 at 3 37 06 PM" src="https://github.com/user-attachments/assets/d5117fed-8abb-4778-a66a-31c701203eae" />
