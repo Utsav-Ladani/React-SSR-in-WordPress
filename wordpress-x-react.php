@@ -61,9 +61,9 @@ function wxr_render_page()
         'post_status' => ['publish', 'draft'],
     ]);
 
-    $props = [
+    $props = (object) [
         'todos' => array_map(function ($post) {
-            return [
+            return (object) [
                 'id' => $post->ID,
                 'title' => $post->post_title,
                 'isDone' => $post->post_status === 'publish',

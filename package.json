@@ -2,18 +2,18 @@
   "name": "wordpress-x-react",
   "version": "1.0.0",
   "scripts": {
-    "build:server": "node scripts/build.js",
-    "build:client": "wp-scripts build src/client.js",
     "build": "npm run build:server && npm run build:client",
-    "start": "wp-scripts start --hot"
+    "build:server": "js2php ./src/server.js ./build-server/server.php",
+    "build:client": "wp-scripts build src/client.js",
+    "dev:server": "js2php --watch ./src/server.js ./build-server/server.php",
+    "dev:client": "wp-scripts start src/client.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@babel/cli": "^7.28.3",
-    "@babel/core": "^7.28.5",
+    "js-to-php-transpiler": "1.0.1",
     "@tailwindcss/postcss": "^4.1.17",
     "@wordpress/scripts": "^31.1.0",
     "clean-webpack-plugin": "^4.0.0",
